@@ -20,6 +20,8 @@ import {GoogleSignin, GoogleSigninButton} from 'react-native-google-signin';
 allCommunicationPreferenceOptions = null;
 allCommunicationFrequencyOptions = null;
 allGroups = null;
+groupsImPartOf = null;
+groupsImNotPartOf = null;
 
 
 class MainHeader extends React.Component {
@@ -39,7 +41,16 @@ class MainHeader extends React.Component {
         <View style={{width: '80%', height: 50, alignItems:'center', justifyContent:'center'}}>
           <Text style={{fontFamily:'HelveticaNeue-Light', color: '#F5FCFF',fontSize:30}}>stay in touch</Text>
         </View>
-        <View style={{width: "10%", height: 50}}/>
+        <View style={{width: "10%", height: 50, alignItems:'center', justifyContent:'center'}}>
+          {this.props.showPlus ?
+          <TouchableOpacity onPress={() => this.props.onClickAdd()}>
+            <Text style={{fontFamily:'HelveticaNeue-Light', color: '#F5FCFF',fontSize:20}}> + </Text>
+          </TouchableOpacity>
+          :           <TouchableOpacity onPress={() => this.props.onClickAdd()}>
+                      <Text style={{fontFamily:'HelveticaNeue-Light', color: '#F5FCFF',fontSize:20}}> + </Text>
+                    </TouchableOpacity>
+          }
+        </View>
       </View>
     )
   }
@@ -92,6 +103,8 @@ class MainScreen extends React.Component {
       isLoading: true,
       modalVisible: false,
       newGroup: "",
+      groupsImPartOf: groupsImPartOf,
+      groupsImNotPartOf: groupsImNotPartOf,
     };
   }
 
@@ -111,8 +124,12 @@ class MainScreen extends React.Component {
         allCommunicationPreferenceOptions = responseJson.allCommunicationPreferenceOptions
         allCommunicationFrequencyOptions = responseJson.allCommunicationFrequencyOptions
         allGroups = responseJson.allGroups
+        groupsImPartOf = responseJson.groupsImPartOf
+        groupsImNotPartOf = responseJson.groupsImNotPartOf
         this.setState({
           isLoading: false,
+          groupsImPartOf:groupsImPartOf,
+          groupsImNotPartOf:groupsImNotPartOf,
         }, function() {
           // do something with new state
         });
@@ -122,8 +139,35 @@ class MainScreen extends React.Component {
       });
   }
 
+  removeCategory(category){
+    console.log("get rid of:", category)
+    fetch('http://localhost:3000/users/removecategory', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          category: category,
+        }),
+      })
+      .then((resp) => resp.json())
+      .then(respJSON => this.modifyLocalCategories(respJSON))
+      .catch(err => console.log(err))
+  }
+
+  modifyLocalCategories(respJSON){
+    this.setState({
+      groupsImNotPartOf: respJSON.groupsImNotPartOf,
+      groupsImPartOf: respJSON.groupsImPartOf,
+    })
+    groupsImNotPartOf = this.state.groupsImNotPartOf
+    groupsImPartOf= this.state.groupsImPartOf
+  }
+
 
   render() {
+    console.log("Groups Im Part Of: ", this.state.groupsImPartOf)
     if (this.state.isLoading) {
        return (
          <View style={{flex: 1, paddingTop: 20}}>
@@ -134,20 +178,89 @@ class MainScreen extends React.Component {
 
     return (
         <View style={{flex: 1, backgroundColor:'#767d87'}}>
-          <MainHeader onClick={() => this._signOut()}/>
+          <MainHeader onClick={() => this._signOut()} onClickAdd={() => this.props.navigation.navigate('CategorySelector',{refresh: () => this.setState({groupsImPartOf: groupsImPartOf})})}/>
 
           <FlatList
-             data={allGroups}
+             data={this.state.groupsImPartOf}
+             extraData={this.state.groupsImPartOf}
              renderItem={(x) =>
+               <Swipeout style={{backgroundColor:'#767d87'}} right={[{text: 'Remove', backgroundColor: 'red', onPress: () => { this.removeCategory(x.item.item) } }]} autoClose={true}>
                  <TouchableOpacity
                   style={{alignItems: 'center', backgroundColor: '#F5FCFF', padding: 20, marginTop: 10, marginLeft:10, marginRight:10}}
-                  onPress={() => this.props.navigation.navigate('Group', {name:x.item.group})}
+                  onPress={() => this.props.navigation.navigate('Group',{name:x.item.item})}
                   >
-                    <Text style={{color: '#767d87', fontSize: 30, fontFamily: 'HelveticaNeue-Thin'}}> {x.item.group} </Text>
+                    <Text style={{color: '#767d87', fontSize: 30, fontFamily: 'HelveticaNeue-Thin'}}> {x.item.item} </Text>
                  </TouchableOpacity>
+               </Swipeout>
              }
            />
         </View>
+    )
+  }
+}
+
+class CategorySelectorScreen extends React.Component{
+  constructor(props) {
+    super(props);
+    this.state = {
+      groupsImNotPartOf: groupsImNotPartOf,
+      groupsImPartOf: groupsImPartOf
+    }
+  }
+
+  static navigationOptions = ({ navigation }) => ({
+    title: "Select Categories",
+    header: null
+  });
+
+  modifyLocalCategories(respJSON){
+    this.setState({
+      groupsImNotPartOf: respJSON.groupsImNotPartOf,
+      groupsImPartOf: respJSON.groupsImPartOf,
+    })
+    groupsImNotPartOf = this.state.groupsImNotPartOf
+    groupsImPartOf= this.state.groupsImPartOf
+  }
+
+  addCategory(category){
+    fetch('http://localhost:3000/users/addcategory', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          category: category,
+        }),
+      })
+      .then((resp) => resp.json())
+      .then(respJSON => this.modifyLocalCategories(respJSON))
+      .catch(err => console.log(err))
+  }
+
+  handleGoBack(){
+    this.props.navigation.state.params.refresh()
+    this.props.navigation.goBack()
+  }
+
+  render(){
+    return(
+      <View style={{flex:1, backgroundColor:'#767d87'}}>
+        <BackupHeader title="categories" onClick={ () => this.handleGoBack()} onClickAdd={ () => this.props.navigation.navigate('AddToGroup')}/>
+
+        <FlatList
+           data={this.state.groupsImNotPartOf}
+           extraData={this.state.groupsImNotPartOf}
+           renderItem={(x) =>
+               <TouchableOpacity
+                style={{alignItems: 'center', backgroundColor: '#F5FCFF', padding: 20, marginTop: 10, marginLeft:10, marginRight:10}}
+                onPress={() => this.addCategory(x)}
+                >
+                  <Text style={{color: '#767d87', fontSize: 30, fontFamily: 'HelveticaNeue-Thin'}}> {x.item} </Text>
+               </TouchableOpacity>
+           }
+         />
+      </View>
     )
   }
 }
@@ -215,6 +328,10 @@ class GroupScreen extends React.Component {
     this.props.navigation.goBack()
   }
 
+  handleRefreshPage(){
+    this.setState({contacts: allGroups.filter(x => x.group === this.state.group)[0].contacts})
+  }
+
   render() {
     return (
         <View style={{flex:1, backgroundColor:'#767d87'}}>
@@ -230,7 +347,7 @@ class GroupScreen extends React.Component {
             <View style={{backgroundColor: '#767d87'}}>
               <TouchableOpacity
                 style={{flex: 1, alignItems: 'center', backgroundColor: "white", justifyContent: 'center', padding: 40, marginTop: 10, marginLeft:10, marginRight:10, borderWidth: 4, borderColor: '#767d87'}}
-                onPress={() => this.props.navigation.navigate('ManageContact', {group: this.state.group, originScreenTitle:this.state.group, refresh: () => this.forceUpdate()})}
+                onPress={() => this.props.navigation.navigate('ManageContact', {group: this.state.group, originScreenTitle:this.state.group, refresh: () => this.handleRefreshPage()})}
               >
 
                 <Text style={{fontSize: 33, color: 'black', fontFamily: 'HelveticaNeue-Thin',}}> {this.state.contacts.length===0 ? "0 people" : this.state.contacts.length===1 ? this.state.contacts[0].firstName : this.state.contacts.length===2 ? this.state.contacts[0].firstName + "\n & " + this.state.contacts[1].firstName : this.state.contacts[0].firstName + "\n & " + String(this.state.contacts.length-1) + " others"}</Text>
@@ -305,15 +422,28 @@ class AddToGroupScreen extends React.Component{
     }
   }
 
-  handleClick(contact){
-    //Database Call here
-    allGroups.filter(x => x.group === this.state.group)[0].contacts.push(contact)
-    this.props.navigation.state.params.refresh()
-    this.props.navigation.goBack()
+  addMemberToGroup(contact){
+    //DATABASE CALL!
+    console.log("Adding member to group,", allGroups.filter(x => x.group === this.state.group)[0].contacts)
+    fetch('http://localhost:3000/users/addcontacttogroup', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contact: contact,
+          group: this.state.group,
+        }),
+      })
+      .then((resp) => resp.json())
+      .then(respJSON => allGroups.filter(x => x.group === this.state.group)[0].contacts = respJSON.contacts)
+      .then(respJSON => this.props.navigation.state.params.refresh())
+      .then(respJSON => this.props.navigation.goBack())
+      .catch(err => console.log(err))
   }
 
   parseContact(contact){
-
     return {
       key: contact.item.givenName+contact.item.phoneNumbers.map(x => x.label === "mobile" ? x.number : false)[0],
       firstName: contact.item.givenName,
@@ -344,7 +474,7 @@ class AddToGroupScreen extends React.Component{
            renderItem={(x) =>
              <View>
                {console.log("Contact:",JSON.stringify(x))}
-               <ContactListItem contact={this.parseContact(x)} onClick={(contact) => this.handleClick(contact)} />
+               <ContactListItem contact={this.parseContact(x)} onClick={(contact) => this.addMemberToGroup(contact)} />
             </View>
              }
          />
@@ -359,7 +489,7 @@ class AddToGroupScreen extends React.Component{
 
 class ManageContactScreen extends React.Component {
   static navigationOptions = ({ navigation }) => ({
-    title: "Manage Contacts",
+    title: "Manage Group",
     header: null
   });
 
@@ -372,12 +502,32 @@ class ManageContactScreen extends React.Component {
     };
   }
 
+  modifyLocalState(respJSON){
+    allGroups.filter(x => x.group === this.state.group)[0].contacts = respJSON.contacts
+    this.setState({contacts: allGroups.filter(x => x.group === this.state.group)[0].contacts})
+  }
+
   removeMemberFromGroup(contact){
     //DATABASE CALL!
-    let temp = [...this.state.contacts]
-    temp.splice(temp.indexOf(contact),1)
-    this.setState({contacts: temp})
-    allGroups.filter(x => x.group === this.props.navigation.state.params.group)[0].contacts = temp
+    console.log("Ayo what up,", contact.item, this.state.group)
+    fetch('http://localhost:3000/users/removecontactfromgroup', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contact: contact.item,
+          group: this.state.group,
+        }),
+      })
+      .then((resp) => resp.json())
+      .then(respJSON => this.modifyLocalState(respJSON))
+      .catch(err => console.log(err))
+  }
+
+  handleRefreshPage(){
+    this.setState({contacts: allGroups.filter(x => x.group === this.state.group)[0].contacts})
   }
 
   handleGoBack(){
@@ -388,11 +538,10 @@ class ManageContactScreen extends React.Component {
   render() {
     return (
         <View style={{flex:1, backgroundColor:'#767d87'}}>
-          <BackupHeader showPlus={true} title="Manage Group" onClick={() => this.handleGoBack()} onClickAdd={ () => this.props.navigation.navigate('AddToGroup',{group: this.state.group, refresh: () => this.forceUpdate()})}/>
+          <BackupHeader showPlus={true} title="Manage Group" onClick={() => this.handleGoBack()} onClickAdd={ () => this.props.navigation.navigate('AddToGroup',{group: this.state.group, refresh: () => this.handleRefreshPage()})}/>
           <FlatList
              data={this.state.contacts}
-             extraData={this.state}
-             removeClippedSubviews={false}
+             extraData={this.state.contacts}
              renderItem={(x) =>
                <Swipeout style={{backgroundColor:'#767d87'}} right={[{text: 'Delete', backgroundColor: 'red', onPress: () => { this.removeMemberFromGroup(x) } }]} autoClose={true}>
                  <View style={{backgroundColor: 'white', justifyContent: 'center', padding: 10, marginTop: 10, marginLeft:10, marginRight:10}}>
@@ -560,6 +709,9 @@ export default StackNavigator({
   },
   AddToGroup:{
     screen: AddToGroupScreen,
+  },
+  CategorySelector:{
+    screen: CategorySelectorScreen,
   },
 },
 {initialRouteName: 'Login'});
